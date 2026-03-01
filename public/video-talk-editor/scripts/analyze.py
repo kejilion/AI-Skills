@@ -115,17 +115,15 @@ def main():
     silences = get_audio_silences(args.video_file, args.silence_thresh, args.silence_min)
     print(f"  Found {len(silences)} silence regions")
 
-    # Detect filler words
+    # Detect filler words (disabled by default, use --filler-words to enable)
+    fillers = []
     if args.filler_words:
         filler_list = args.filler_words.split(",")
-    elif lang == "zh":
-        filler_list = DEFAULT_FILLER_ZH.split(",")
+        print("Detecting filler words...")
+        fillers = find_filler_words(words, filler_list, args.padding)
+        print(f"  Found {len(fillers)} filler words")
     else:
-        filler_list = DEFAULT_FILLER_EN.split(",")
-
-    print("Detecting filler words...")
-    fillers = find_filler_words(words, filler_list, args.padding)
-    print(f"  Found {len(fillers)} filler words")
+        print("Filler word detection: skipped (silence-only mode)")
 
     # Combine removals
     all_removals = silences + fillers

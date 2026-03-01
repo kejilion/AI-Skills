@@ -3,9 +3,10 @@ name: video-talk-editor
 description: >
   Smart video editor for talking-head / oral-broadcast (口播) videos.
   Use when user sends a video file and asks to cut, trim, edit, or
-  clean up a talking-head video. Handles: silence removal, filler-word
-  cutting, scene-based splitting, subtitle burn-in, loudness normalization,
-  jump-cut assembly, highlight extraction, and multi-segment export.
+  clean up a talking-head video. Handles: silence removal, subtitle
+  burn-in, loudness normalization, jump-cut assembly.
+  Default mode: silence-only cutting (simple and reliable).
+  Filler-word cutting available via --filler-words flag but disabled by default.
   Supports Chinese and English speech. NOT for VFX, color grading,
   or non-speech video editing.
 ---
