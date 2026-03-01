@@ -70,10 +70,11 @@ jobs:
 
     steps:
       - name: Pre-install essentials
-        shell: bash
         run: |
-          # Some distros lack tar/gzip needed by actions/checkout
-          if command -v zypper &>/dev/null; then
+          # Alpine needs bash first; openSUSE needs tar for checkout
+          if [ -f /etc/alpine-release ]; then
+            apk add --no-cache bash tar gzip 2>/dev/null || true
+          elif command -v zypper >/dev/null 2>&1; then
             zypper -n install tar gzip 2>/dev/null || true
           fi
 
