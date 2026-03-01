@@ -1,6 +1,10 @@
 name: Kernel Optimize Live Test
 
 on:
+  push:
+    paths:
+      - "kernel-optimize-live-test/**"
+      - ".github/workflows/test-kernel-live.yml"
   workflow_dispatch:
 
 jobs:
