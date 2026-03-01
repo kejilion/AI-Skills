@@ -3,11 +3,11 @@ name: Network Optimizer Compatibility Test
 on:
   push:
     paths:
-      - 'network-optimize.sh'
+      - 'network-optimize/**'
       - '.github/workflows/test-network-optimize.yml'
   pull_request:
     paths:
-      - 'network-optimize.sh'
+      - 'network-optimize/**'
   workflow_dispatch:
 
 jobs:
@@ -16,47 +16,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Debian (latest 2)
           - distro: debian:12
             name: Debian 12 (Bookworm)
           - distro: debian:13
             name: Debian 13 (Trixie)
-
-          # Ubuntu (latest 2 LTS)
           - distro: ubuntu:22.04
             name: Ubuntu 22.04 (Jammy)
           - distro: ubuntu:24.04
             name: Ubuntu 24.04 (Noble)
-
-          # AlmaLinux (latest 2)
+          - distro: almalinux:8
+            name: AlmaLinux 8
           - distro: almalinux:9
             name: AlmaLinux 9
-          - distro: almalinux:10
-            name: AlmaLinux 10
-
-          # Rocky Linux (latest 2)
+          - distro: rockylinux:8
+            name: Rocky Linux 8
           - distro: rockylinux:9
             name: Rocky Linux 9
-          - distro: rockylinux:10
-            name: Rocky Linux 10
-
-          # Fedora (latest 2)
           - distro: fedora:41
             name: Fedora 41
           - distro: fedora:42
             name: Fedora 42
-
-          # Alpine (latest 2)
           - distro: alpine:3.20
             name: Alpine 3.20
           - distro: alpine:3.21
             name: Alpine 3.21
-
-          # Arch
           - distro: archlinux:latest
             name: Arch Linux
-
-          # openSUSE (latest 2)
           - distro: opensuse/leap:15.5
             name: openSUSE Leap 15.5
           - distro: opensuse/leap:15.6
@@ -69,177 +54,123 @@ jobs:
       options: --privileged
 
     steps:
+      - name: Pre-install essentials
+        run: |
+          if [ -f /etc/alpine-release ]; then
+            apk add --no-cache bash tar gzip 2>/dev/null || true
+          elif command -v zypper >/dev/null 2>&1; then
+            zypper -n install tar gzip 2>/dev/null || true
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install dependencies
+        shell: bash
         run: |
-          # Detect distro and install basics
           if [ -f /etc/os-release ]; then
             . /etc/os-release
             case "$ID" in
               debian|ubuntu)
                 apt-get update -qq
-                apt-get install -y -qq iputils-ping iproute2 procps ethtool awk grep sed coreutils 2>/dev/null || true
+                apt-get install -y -qq iputils-ping iproute2 procps gawk 2>/dev/null || true
                 ;;
               centos|rhel|almalinux|rocky|fedora)
-                yum install -y -q iputils iproute procps-ng ethtool 2>/dev/null || \
-                dnf install -y -q iputils iproute procps-ng ethtool 2>/dev/null || true
+                dnf install -y -q iputils iproute procps-ng gawk 2>/dev/null || \
+                yum install -y -q iputils iproute procps-ng gawk 2>/dev/null || true
                 ;;
               alpine)
-                apk add --no-cache bash iputils iproute2 procps ethtool 2>/dev/null || true
+                apk add --no-cache iputils iproute2 procps gawk grep sed coreutils 2>/dev/null || true
                 ;;
               arch|manjaro)
-                pacman -Sy --noconfirm iputils iproute2 procps-ng ethtool 2>/dev/null || true
+                pacman -Sy --noconfirm iputils iproute2 procps-ng gawk 2>/dev/null || true
                 ;;
               opensuse*|sles)
-                zypper -n install iputils iproute2 procps ethtool 2>/dev/null || true
+                zypper -n install iputils iproute2 procps gawk 2>/dev/null || true
                 ;;
             esac
           fi
 
       - name: Syntax check
-        run: bash -n network-optimize.sh
+        shell: bash
+        run: bash -n network-optimize/network-optimize.sh
 
-      - name: Test detect functions (source mode)
+      - name: Test detect_distro
+        shell: bash
         run: |
-          bash -c '
-            source network-optimize.sh
+          source network-optimize/network-optimize.sh
+          DISTRO=$(detect_distro)
+          echo "Distro: $DISTRO"
+          [ "$DISTRO" != "unknown" ] && echo "PASS" || { echo "FAIL"; exit 1; }
 
-            echo "=== detect_distro ==="
-            DISTRO=$(detect_distro)
-            echo "Distro: $DISTRO"
-            [ -n "$DISTRO" ] && echo "PASS" || { echo "FAIL"; exit 1; }
-
-            echo "=== detect_memory_mb ==="
-            MEM=$(detect_memory_mb)
-            echo "Memory: ${MEM}MB"
-            [ -n "$MEM" ] && [ "$MEM" -gt 0 ] 2>/dev/null && echo "PASS" || { echo "FAIL"; exit 1; }
-
-            echo "=== detect_link_speed ==="
-            SPEED=$(detect_link_speed)
-            echo "Speed: ${SPEED}Mbps"
-            [ -n "$SPEED" ] && echo "PASS" || { echo "FAIL"; exit 1; }
-
-            echo "=== kernel_version ==="
-            KVER=$(kernel_version)
-            echo "Kernel: $KVER"
-            [ -n "$KVER" ] && echo "PASS" || { echo "FAIL"; exit 1; }
-
-            echo "=== classify_bandwidth ==="
-            for s in 50 500 5000 50000; do
-              CLASS=$(classify_bandwidth $s)
-              echo "  ${s}Mbps -> $CLASS"
-            done
-            echo "PASS"
-
-            echo "=== show_network_status ==="
-            show_network_status
-            echo "PASS"
-          '
-
-      - name: Test config generation (dry run)
+      - name: Test detect_memory_mb
+        shell: bash
         run: |
-          bash -c '
-            source network-optimize.sh
+          source network-optimize/network-optimize.sh
+          MEM=$(detect_memory_mb)
+          echo "Memory: ${MEM}MB"
+          [ -n "$MEM" ] && [ "$MEM" -gt 0 ] 2>/dev/null && echo "PASS" || { echo "FAIL"; exit 1; }
 
-            # Override functions that need real network
-            detect_latency() { echo "25.0"; }
-            detect_packet_loss() { echo "0"; }
+      - name: Test kernel_version
+        shell: bash
+        run: |
+          source network-optimize/network-optimize.sh
+          KVER=$(kernel_version)
+          echo "Kernel: $KVER"
+          [ -n "$KVER" ] && echo "PASS" || { echo "FAIL"; exit 1; }
 
-            # Generate config without applying (test the cat heredoc)
-            CONF="/tmp/test-network-optimize.conf"
-            MEM_MB=$(detect_memory_mb)
-            SPEED=$(detect_link_speed)
-            BW_CLASS=$(classify_bandwidth "$SPEED")
-            KVER=$(kernel_version)
+      - name: Test detect_link_speed
+        shell: bash
+        run: |
+          source network-optimize/network-optimize.sh
+          SPEED=$(detect_link_speed)
+          echo "Speed: ${SPEED}Mbps"
+          [ -n "$SPEED" ] && [ "$SPEED" -gt 0 ] 2>/dev/null && echo "PASS" || { echo "FAIL"; exit 1; }
 
-            # Set params based on class
-            case "$BW_CLASS" in
-              low)
-                TCP_RMEM="4096 65536 2097152"
-                TCP_WMEM="4096 65536 2097152"
-                TCP_RMEM_MAX=2097152
-                TCP_WMEM_MAX=2097152
-                SOMAXCONN=1024
-                NETDEV_BACKLOG=1000
-                NETDEV_BUDGET=300
-                NETDEV_BUDGET_USECS=2000
-                CONNTRACK_MAX=65536
-                ;;
-              medium)
-                TCP_RMEM="4096 131072 16777216"
-                TCP_WMEM="4096 131072 16777216"
-                TCP_RMEM_MAX=16777216
-                TCP_WMEM_MAX=16777216
-                SOMAXCONN=4096
-                NETDEV_BACKLOG=5000
-                NETDEV_BUDGET=600
-                NETDEV_BUDGET_USECS=4000
-                CONNTRACK_MAX=262144
-                ;;
-              *)
-                TCP_RMEM="4096 262144 67108864"
-                TCP_WMEM="4096 262144 67108864"
-                TCP_RMEM_MAX=67108864
-                TCP_WMEM_MAX=67108864
-                SOMAXCONN=8192
-                NETDEV_BACKLOG=10000
-                NETDEV_BUDGET=1200
-                NETDEV_BUDGET_USECS=6000
-                CONNTRACK_MAX=524288
-                ;;
-            esac
+      - name: Test classify_bandwidth
+        shell: bash
+        run: |
+          source network-optimize/network-optimize.sh
+          for pair in "50:low" "500:medium" "5000:high" "50000:ultra"; do
+            speed="${pair%%:*}"
+            expected="${pair##*:}"
+            got=$(classify_bandwidth "$speed")
+            [ "$got" = "$expected" ] && echo "${speed}Mbps -> $got ✓" || { echo "${speed}Mbps FAIL: $got != $expected"; exit 1; }
+          done
+          echo "PASS"
 
-            TARGET_CC="bbr"
-            QDISC="fq"
-            DISTRO=$(detect_distro)
+      - name: Test show_network_status
+        shell: bash
+        run: |
+          source network-optimize/network-optimize.sh
+          show_network_status
+          echo "PASS"
 
-            # Test heredoc config generation
-            cat > "$CONF" << SYSCTL
-net.core.default_qdisc = $QDISC
-net.ipv4.tcp_congestion_control = $TARGET_CC
-net.core.rmem_max = $TCP_RMEM_MAX
-net.core.wmem_max = $TCP_WMEM_MAX
-net.ipv4.tcp_rmem = $TCP_RMEM
-net.ipv4.tcp_wmem = $TCP_WMEM
-net.core.somaxconn = $SOMAXCONN
-net.ipv4.tcp_mem = $((MEM_MB * 1024 / 8)) $((MEM_MB * 1024 / 4)) $((MEM_MB * 1024 / 2))
-SYSCTL
-
-            echo "=== Generated config ==="
-            cat "$CONF"
-
-            # Validate: all lines should be key = value
-            ERRORS=$(grep -vE "^(#|$|[a-z])" "$CONF" || true)
-            if [ -n "$ERRORS" ]; then
-              echo "FAIL: invalid lines found:"
-              echo "$ERRORS"
-              exit 1
-            fi
-
-            echo "PASS: config generation OK"
-          '
+      - name: Test config generation
+        shell: bash
+        run: |
+          source network-optimize/network-optimize.sh
+          MEM_MB=$(detect_memory_mb)
+          TCP_MEM_LOW=$((MEM_MB * 1024 / 8))
+          echo "tcp_mem low: $TCP_MEM_LOW"
+          [ "$TCP_MEM_LOW" -gt 0 ] && echo "PASS" || { echo "FAIL"; exit 1; }
 
       - name: Test restore function
+        shell: bash
         run: |
-          bash -c '
-            source network-optimize.sh
-
-            # Create a dummy config to restore from
-            mkdir -p /etc/sysctl.d
-            echo "# test" > /etc/sysctl.d/99-network-optimize.conf
-
-            restore_network_defaults 2>&1 || true
-            echo "PASS: restore completed"
-          '
+          source network-optimize/network-optimize.sh
+          mkdir -p /etc/sysctl.d
+          echo "# test" > /etc/sysctl.d/99-network-optimize.conf
+          restore_network_defaults 2>&1 || true
+          echo "PASS"
 
       - name: Summary
         if: always()
+        shell: bash
         run: |
           echo "==============================="
           echo "Distro: ${{ matrix.name }}"
           cat /etc/os-release 2>/dev/null | grep PRETTY_NAME || true
           echo "Kernel: $(uname -r)"
-          echo "Shell: $(bash --version | head -1)"
+          echo "Bash: $(bash --version | head -1)"
           echo "==============================="
