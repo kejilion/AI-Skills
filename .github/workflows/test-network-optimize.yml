@@ -29,16 +29,16 @@ jobs:
             name: Ubuntu 24.04 (Noble)
 
           # AlmaLinux (latest 2)
+          - distro: almalinux:8
+            name: AlmaLinux 8
           - distro: almalinux:9
             name: AlmaLinux 9
-          - distro: almalinux:10
-            name: AlmaLinux 10
 
           # Rocky Linux (latest 2)
+          - distro: rockylinux:8
+            name: Rocky Linux 8
           - distro: rockylinux:9
             name: Rocky Linux 9
-          - distro: rockylinux:10
-            name: Rocky Linux 10
 
           # Fedora (latest 2)
           - distro: fedora:41
@@ -69,6 +69,14 @@ jobs:
       options: --privileged
 
     steps:
+      - name: Pre-install essentials
+        shell: bash
+        run: |
+          # Some distros lack tar/gzip needed by actions/checkout
+          if command -v zypper &>/dev/null; then
+            zypper -n install tar gzip 2>/dev/null || true
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -93,7 +101,7 @@ jobs:
                 pacman -Sy --noconfirm iputils iproute2 procps-ng gawk 2>/dev/null || true
                 ;;
               opensuse*|sles)
-                zypper -n install iputils iproute2 procps gawk 2>/dev/null || true
+                zypper -n install tar gzip iputils iproute2 procps gawk 2>/dev/null || true
                 ;;
             esac
           fi
