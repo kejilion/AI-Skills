@@ -11,6 +11,11 @@
 - **效果**: 调用 Microsoft Edge TTS 生成高保真语音（默认云扬男声），并自动通过 FFmpeg 压制为 OGG/Opus 编码格式。
 - **场景**: 告别机械的 MP3 文件传输，让 AI 助手在 Telegram 中以人类般的“语音泡泡”进行回复。
 
+### [Video Talk Editor (Silent Trimming)](./public/video-talk-editor)
+- **功能**: 智能视频剪辑，自动去除谈话类视频中的静音片段。
+- **效果**: 结合 `faster-whisper` 精准定位人声，通过 `ffmpeg` 自动切除停顿与空白，并可选生成压缩版高能视频。
+- **场景**: 极大地提升视频后期效率，让视频内容更紧凑、更有表现力，特别适合 Vlog、教程或会议记录。
+
 ### [HuggingFace Multi-View Generator (Qwen)](./public/hf-multiview-qwen)
 - **功能**: 自动调用 HuggingFace/ModelScope 上的 Qwen 3D 摄影机模型。
 - **效果**: 只需一张原图，即可自动生成：正视、侧视、背视、顶视、45度斜视五张高保真照片。
