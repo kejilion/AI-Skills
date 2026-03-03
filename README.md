@@ -6,6 +6,11 @@
 
 ## 🛠️ 当前包含的技能
 
+### [Telegram Voice TTS (Edge-TTS + FFmpeg)](./public/telegram-voice-tts)
+- **功能**: 生成符合 Telegram 原生规范的蓝色语音条。
+- **效果**: 调用 Microsoft Edge TTS 生成高保真语音（默认云扬男声），并自动通过 FFmpeg 压制为 OGG/Opus 编码格式。
+- **场景**: 告别机械的 MP3 文件传输，让 AI 助手在 Telegram 中以人类般的“语音泡泡”进行回复。
+
 ### [HuggingFace Multi-View Generator (Qwen)](./public/hf-multiview-qwen)
 - **功能**: 自动调用 HuggingFace/ModelScope 上的 Qwen 3D 摄影机模型。
 - **效果**: 只需一张原图，即可自动生成：正视、侧视、背视、顶视、45度斜视五张高保真照片。
