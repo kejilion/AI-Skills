@@ -10,6 +10,10 @@
 - **功能**: 在本地启用 OpenClaw 记忆索引（SQLite + 向量检索），并提供最稳的升级/备份实践。
 - **场景**: 频繁升级 OpenClaw 也不易“失忆”，索引坏了可重建，源数据可审计。
 
+### [OpenClaw Memory Backend: QMD (Hybrid Search + Rerank)](./public/openclaw-memory-qmd)
+- **功能**: 将 OpenClaw 的记忆检索后端切换为 QMD（BM25 + 向量 + rerank），提供落地/灰度/回退指南。
+- **场景**: 记忆库变大后追求更强召回与排序质量；可选增强（experimental）。
+
 ### [Telegram Voice TTS (Edge-TTS + FFmpeg)](./public/telegram-voice-tts)
 - **功能**: 生成符合 Telegram 原生规范的蓝色语音条。
 - **效果**: 调用 Microsoft Edge TTS 生成高保真语音（默认云扬男声），并自动通过 FFmpeg 压制为 OGG/Opus 编码格式。
