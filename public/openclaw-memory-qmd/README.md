@@ -21,30 +21,37 @@
 根据 OpenClaw 官方文档（concepts/memory → QMD backend）：
 
 1) **安装 QMD CLI**（OpenClaw 不会替你装）
-- 推荐使用 Bun 全局安装（或下载 release）。
+- 官方示例偏 Bun：`bun install -g https://github.com/tobi/qmd`
+- **实测：也可以用 npm 安装（更通用）**：`npm i -g @tobilu/qmd`
 
 2) **SQLite 需允许加载 extensions**
 - QMD 依赖 sqlite 扩展能力（不同发行版的 sqlite 构建策略不同）。
 
 3) **本地模型运行环境**
-- QMD 通过 Bun + `node-llama-cpp` 本地运行，并在首次使用时自动下载 GGUF 模型（embedding/rerank/查询扩展）。
+- QMD 通过 `node-llama-cpp` 本地运行，并在首次使用时自动下载 GGUF 模型（embedding/rerank/查询扩展）。
 
 > 资源提醒：QMD 比 builtin memorySearch 更“重”，首次查询可能会下载模型并变慢。
 
 ---
 
-## 2. 最小可行性验证（推荐先做）
+## 2. 最小可行性验证（先跑通 QMD）
 在你切换 OpenClaw 配置之前，先确保 QMD 在系统上能跑通：
 
 1) 确认 `qmd` 可执行：
 ```bash
 qmd --help
+qmd status
 ```
 
-2) 给记忆目录建 collection（示例）：
+2) 给记忆目录建 collection（示例）
+> 注意：不同版本参数名可能不同。本指南以 `qmd --help` 输出为准（实测是 `--mask`）。
+
 ```bash
-qmd collection add ~/.openclaw/workspace/memory --name memory
-qmd collection add ~/.openclaw/workspace --name workspace --pattern "**/*.md"
+# 索引 daily memory
+qmd collection add ~/.openclaw/workspace/memory --name memory --mask "**/*.md"
+
+# 索引长期 MEMORY.md（只索引该文件即可）
+qmd collection add ~/.openclaw/workspace --name memory-long --mask "MEMORY.md"
 ```
 
 3) 更新索引 + 生成 embedding：
@@ -53,12 +60,12 @@ qmd update
 qmd embed
 ```
 
-4) 试一次混合检索（质量最好）：
+4) 试一次混合检索（质量最好但更慢）：
 ```bash
 qmd query "测试" --json -n 5
 ```
 
-如果以上步骤能返回结果，说明 QMD 侧链路没问题。
+如果以上步骤能返回结果，说明 **QMD 本体链路**没问题。
 
 ---
 
@@ -73,7 +80,7 @@ qmd query "测试" --json -n 5
     "qmd": {
       "includeDefaultMemory": true,
       "command": "qmd",
-      "searchMode": "search", // 可选：search | vsearch | query（query 通常质量最好但更慢）
+      "searchMode": "query", // search | vsearch | query（query 通常质量最好但更慢）
       "update": {
         "interval": "5m",
         "debounceMs": 15000,
@@ -108,28 +115,72 @@ openclaw gateway restart
 ```bash
 openclaw memory status
 ```
-理想状态会显示 backend 为 qmd（若 OpenClaw 有暴露该字段）。
 
 ---
 
-## 4. 预热/首次查询变慢怎么办？
-官方文档提示：首次 `qmd query` 可能会下载 GGUF 模型并较慢。
+## 4. 关键踩坑（必看）：OpenClaw 的 QMD 索引目录（XDG）要对齐
+OpenClaw 在运行 QMD 时，会把 QMD 的 `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` 指向：
 
-你可以在切换前先“手动预热一次”，或者按 OpenClaw 文档导出的 XDG 目录对齐方式预热 QMD（确保用的是 OpenClaw 预期的 QMD home）。
+- `~/.openclaw/agents/<agentId>/qmd/xdg-config`
+- `~/.openclaw/agents/<agentId>/qmd/xdg-cache`
+
+也就是说：
+- 你在 shell 里直接跑 `qmd update/embed`，默认索引会建在 `~/.cache/qmd/index.sqlite`
+- 但 OpenClaw 期望的索引在 `~/.openclaw/agents/<agentId>/qmd/xdg-cache/qmd/index.sqlite`
+
+如果不对齐，会出现典型错误：
+- `openclaw memory status` 警告：`failed to read qmd index stats: unable to open database file`
+- 或者显示 `Indexed: 0/...`
+
+### 4.1 一键在 OpenClaw 的 XDG 目录下重建索引（推荐做法）
+先从 `openclaw memory status` 里确认你的 `<agentId>`（以及 Store 路径）。
+
+然后运行：
+```bash
+STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+AGENT_ID="<agentId>"  # 例如：main / expert-4.6（以 openclaw memory status 为准）
+
+export XDG_CONFIG_HOME="$STATE_DIR/agents/$AGENT_ID/qmd/xdg-config"
+export XDG_CACHE_HOME="$STATE_DIR/agents/$AGENT_ID/qmd/xdg-cache"
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+
+# 建 collection（命名可自定；建议跟 OpenClaw 逻辑一致）
+qmd collection add ~/.openclaw/workspace/memory --name memory-root --mask "**/*.md" || true
+qmd collection add ~/.openclaw/workspace --name memory-long --mask "MEMORY.md" || true
+
+# 构建索引 + 向量
+qmd update
+qmd embed
+
+# 试一次检索
+qmd query "JTTI" -c memory-root --json -n 3
+```
+
+完成后，`openclaw memory status` 应该能看到非 0 的 Indexed。
 
 ---
 
-## 5. 与我们现有方案的对比（什么时候值得上）
+## 5. Debian/arm64 实测补丁：强制 CPU-only（避免 CUDA 反复报错/尝试构建）
+在 Linux（尤其 arm64）上，`node-llama-cpp` 可能会错误地检测到 CUDA 相关库痕迹，然后尝试构建 CUDA 变体并失败（日志很吵、还可能拖慢首次运行）。
 
-### 继续用 builtin（SQLite + 本地 embedding）更合适：
-- 你更在意稳定、少依赖、升级省心
-- 记忆规模不大
-- 当前检索准确率已够用
+推荐做法：给 OpenClaw gateway 的 systemd service 加 drop-in，强制 CPU-only：
 
-### 上 QMD 更合适：
-- 你要更强的“混合检索 + rerank”质量
-- 你能接受额外依赖（Bun/QMD/SQLite 扩展）
-- 你愿意做一次落地验证与灰度切换
+```bash
+mkdir -p ~/.config/systemd/user/openclaw-gateway.service.d
+cat > ~/.config/systemd/user/openclaw-gateway.service.d/qmd-cpu-only.conf <<'EOF'
+[Service]
+Environment=NODE_LLAMA_CPP_GPU=false
+EOF
+
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
+```
+
+验证（环境变量生效 + QMD backend 正常）：
+```bash
+systemctl --user show openclaw-gateway.service -p Environment --value | tr ' ' '\n' | grep NODE_LLAMA_CPP_GPU
+openclaw memory status
+```
 
 ---
 
@@ -137,15 +188,7 @@ openclaw memory status
 如果你发现 QMD 不稳定或环境不适配：
 - 删除/注释 `memory.backend = "qmd"`
 - 回到 builtin memorySearch（SQLite）
-- 重新 `openclaw gateway restart`
-
----
-
-## 7. 推荐落地路径（最稳）
-1) 先保持 builtin memorySearch（我们已验证可用）
-2) 装 Bun/QMD/SQLite 并跑通“最小可行性验证”
-3) 再灰度切换 `memory.backend=qmd`（一两天观察）
-4) 发现问题随时回退
+- `openclaw gateway restart`
 
 ---
 
