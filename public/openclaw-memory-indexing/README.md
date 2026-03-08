@@ -167,8 +167,69 @@ bash scripts/backup_memories.sh
 
 ---
 
-## 7. 建议的最小落地清单
+## 7. 为什么明明记忆文件还在，第二天却像“失忆”了？
+这是一个非常常见的误区。
+
+很多人会以为：
+- `MEMORY.md` 还在
+- `memory/*.md` 也都没丢
+- SQLite 索引也正常
+
+那 OpenClaw 第二天就应该还能顺着昨晚的话继续聊。
+
+但实际上，**记忆文件/索引** 和 **会话连续性** 是两件事：
+
+- `MEMORY.md` / `memory/**/*.md`：负责“事实有没有被写下来”
+- SQLite / embedding 索引：负责“这些事实能不能被检索出来”
+- `session.reset`：负责“当前聊天能不能继续沿用昨晚那个 sessionId”
+
+如果你没有显式配置 `session.reset` / `resetByType`，OpenClaw 很可能会落回默认策略：
+- **daily reset**：默认按 Gateway 主机本地时间凌晨 4 点
+- **idle reset**：默认空闲 60 分钟
+
+这就会出现一个典型现象：
+- 记忆文件没丢
+- 索引也没坏
+- 但会话已经换了
+- 所以它“看起来像失忆”
+
+### 推荐一起补上的 session 策略
+如果你希望私聊尽量跨天连续，而群聊不要拖太长上下文，可以在 `~/.openclaw/openclaw.json` 里加上：
+
+```json5
+{
+  session: {
+    dmScope: "per-channel-peer",
+    resetTriggers: ["/new", "/reset"],
+    reset: {
+      mode: "idle",
+      idleMinutes: 10080 // 7 天
+    },
+    resetByType: {
+      direct: { mode: "idle", idleMinutes: 10080 },
+      thread: { mode: "idle", idleMinutes: 1440 },
+      group: { mode: "idle", idleMinutes: 120 }
+    }
+  }
+}
+```
+
+### 怎么理解这套配置？
+- **私聊（direct）**：最需要跨天连续，给 7 天 idle 比较合适
+- **线程 / Telegram topic / Discord thread**：更像围绕任务的上下文，1 天 idle 重置更合理
+- **群聊（group）**：噪音最大，2 小时已经足够保守
+
+一句话总结：
+- **本篇记忆索引方案**：保证“记忆事实不会丢，索引坏了也能重建”
+- **session.reset 策略**：保证“它第二天不至于像完全没聊过”
+
+两者一起配，体验才完整。
+
+---
+
+## 8. 建议的最小落地清单
 - [ ] 建立 `MEMORY.md` + `BOOTSTRAP.md` + `memory/` 结构
 - [ ] 配置 `memorySearch.provider=local`
 - [ ] 首次运行 `openclaw memory index`
+- [ ] 同时补上 `session.reset` / `resetByType` 策略
 - [ ] 每次升级前跑 `backup_memories.sh`

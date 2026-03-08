@@ -237,7 +237,54 @@ NODE_LLAMA_CPP_GPU=false
 
 ---
 
-## 6. 回退（安全阀）
+## 6. 重要提醒：QMD 不等于“跨天不断会话”
+QMD 解决的是 **记忆检索质量**，不是 **当前会话连续性**。
+
+很多人会遇到这样一种错觉：
+- `MEMORY.md` / `memory/*.md` 都还在
+- `openclaw memory status` 也正常
+- 但第二天一开口，OpenClaw 像“失忆”了一样，接不上昨晚的话
+
+这通常不是 QMD 坏了，而是 **session 重置策略**在生效。
+
+OpenClaw 官方默认行为里，常见触发条件是：
+- **daily reset**：默认按 Gateway 主机本地时间凌晨 4 点判断
+- **idle reset**：默认空闲 60 分钟后过期
+
+所以如果你没有显式配置 `session.reset` / `session.resetByType`，就可能出现：
+- QMD 检索没问题
+- 但会话 ID 已经换了
+- 模型读不到“昨晚那一轮”的上下文
+
+如果你希望私聊尽量跨天连续，推荐同时补上下面这套 `session` 策略：
+
+```json5
+{
+  session: {
+    dmScope: "per-channel-peer",
+    resetTriggers: ["/new", "/reset"],
+    reset: {
+      mode: "idle",
+      idleMinutes: 10080 // 7 天
+    },
+    resetByType: {
+      direct: { mode: "idle", idleMinutes: 10080 },
+      thread: { mode: "idle", idleMinutes: 1440 },
+      group: { mode: "idle", idleMinutes: 120 }
+    }
+  }
+}
+```
+
+一句话理解：
+- **QMD**：负责把“记忆找回来”
+- **session.reset**：负责让它“第二天还能接上昨天的话”
+
+两者都要配，体验才完整。
+
+---
+
+## 7. 回退（安全阀）
 任何时候想回 builtin：
 - 删除/注释 `~/.openclaw/openclaw.json` 里的 `memory.backend = "qmd"`
 - 然后：
@@ -249,4 +296,5 @@ openclaw gateway restart
 
 ## 参考
 - OpenClaw Memory（QMD backend 章节）：https://docs.openclaw.ai/concepts/memory
+- OpenClaw Session（会话生命周期/重置策略）：https://docs.openclaw.ai/concepts/session
 - QMD 项目：https://github.com/tobi/qmd
