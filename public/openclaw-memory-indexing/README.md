@@ -88,6 +88,150 @@ openclaw memory status
 - `Vector: ready`
 - `Indexed: ... chunks`
 
+
+## 2.5 国内环境特别说明（强烈建议看）
+
+在国内环境下，**不要依赖 Hugging Face 官方源自动下载本地 embedding 模型**。
+
+最稳方案是：
+
+1. 先从国内可达镜像把 GGUF 模型手动下载到本地
+2. 在 `openclaw.json` 中把 `memorySearch.local.modelPath` 指向本地绝对路径
+3. 手动执行索引重建并检查状态
+
+一句话：
+
+> 下载时走镜像，运行时走本地路径。
+
+### 为什么这一步很关键？
+
+很多时候你会看到：
+
+- `Provider: local`
+- `Vector: ready`
+- `FTS: ready`
+
+但继续看会发现：
+
+- `Indexed: 0/x files · 0 chunks`
+
+这说明：
+
+- SQLite/FTS 可能已经初始化完成
+- 向量扩展也可能可用
+- 但 embedding 阶段并没有真正跑通
+
+所以：
+
+> `Provider: local` 不等于索引已经真正可用。
+
+### 国内环境下的典型根因
+
+如果你使用的是这种配置：
+
+```json5
+"modelPath": "hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf"
+```
+
+而服务器对 `huggingface.co` 官方源不可达，就容易出现：
+
+- `openclaw memory index` 长时间转圈
+- `memory_search` 超时或失败
+- 日志里出现 `memory embeddings batch timed out after 600s`、`fetch failed` 一类错误
+
+### 推荐做法：手动下载模型到本地
+
+先创建本地目录：
+
+```bash
+mkdir -p ~/.openclaw/models
+```
+
+然后从国内可达镜像下载模型：
+
+```bash
+curl -L -o ~/.openclaw/models/embeddinggemma-300M-Q8_0.gguf \
+  "https://hf-mirror.com/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf"
+```
+
+如果没有 `curl`，也可以用：
+
+```bash
+wget -O ~/.openclaw/models/embeddinggemma-300M-Q8_0.gguf \
+  "https://hf-mirror.com/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf"
+```
+
+### 配置本地模型路径
+
+编辑 `~/.openclaw/openclaw.json`，把 `modelPath` 改成**本地绝对路径**：
+
+```json5
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "provider": "local",
+        "fallback": "none",
+        "local": {
+          "modelPath": "/root/.openclaw/models/embeddinggemma-300M-Q8_0.gguf"
+        }
+      }
+    }
+  }
+}
+```
+
+注意：
+
+- 建议写**本地绝对路径**
+- 不要继续依赖 `hf:` URI 让它首次自动联网下载
+
+### 然后强制重建索引
+
+```bash
+openclaw memory index --force
+openclaw memory status
+```
+
+### 真正要看什么才算成功？
+
+不要只看：
+
+- `Provider: local`
+- `Vector: ready`
+
+真正要看的是：
+
+- `Indexed: x/x files`
+- `chunks > 0`
+
+例如：
+
+```text
+Indexed: 4/4 files · 6 chunks
+Dirty: no
+Vector: ready
+FTS: ready
+```
+
+看到这种，才说明本地记忆索引真的可用了。
+
+### 推荐排查顺序
+
+如果以后再次遇到本地记忆索引失败，建议按这个顺序查：
+
+1. `openclaw memory status`
+2. 如果 `Indexed = 0`，优先怀疑模型文件不存在、`modelPath` 错误、`hf:` 自动下载失败、embedding 阶段超时
+3. `ls -lh ~/.openclaw/models/` 确认模型文件真实存在
+4. 如果官方源不可达，优先切换镜像
+5. `openclaw memory index --force` 强制重建
+
+### 国内环境最佳实践
+
+- 服务器在国内时，embedding 模型优先本地化
+- 升级前建议备份：`MEMORY.md`、`memory/*.md`、`~/.openclaw/openclaw.json`、`~/.openclaw/models/*.gguf`、`~/.openclaw/memory/*.sqlite`
+- 镜像只是下载手段，不是长期依赖点；**下载走镜像，运行走本地文件**
+
 ---
 
 ## 3. 实时性：索引是否“实时增量”？
