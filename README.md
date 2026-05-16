@@ -29,6 +29,11 @@
 - **效果**: 只需一张原图，即可自动生成：正视、侧视、背视、顶视、45度斜视五张高保真照片。
 - **场景**: 适用于电商产品展示、3D 建模参考、解锁 Netflix/游戏加速等场景的视觉素材生成。
 
+### [OpenAI-Compatible Image Generator](./public/openai-compatible-image-generator)
+- **功能**: 调用 OpenAI 兼容的 `/v1/images/generations` 图片生成接口，支持 `gpt-image-2`、自建代理与第三方网关。
+- **效果**: 内置通用 Python 脚本，自动处理 `b64_json` / `url` 返回、单图/批量输出、额外 provider 参数与密钥环境变量。
+- **场景**: 快速测试图片接口、适配自定义 base URL/API key/model、把提示词生成图稳定落盘并发送附件。
+
 
 ### [China Stock Deep Analysis](./public/china-stock-deep-analysis)
 - **功能**: 面向 A股、港股中资股、中概股 ADR 的单股深度分析、估值判断、同行对比与风险复核。
